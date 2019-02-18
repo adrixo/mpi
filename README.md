@@ -7,13 +7,6 @@ El paso de mensajes es una técnica empleada en programación concurrente para a
 Su principal característica es que no precisa de memoria compartida, por lo que es muy importante en la programación de sistemas distribuidos.
 
 
-## Index
-
-  - [Funciones Básicas](#Architecture)
-  - [Prerequisites](#Prerequisites)
-  - [Problems](#Problems)
-  - [Authors](#Authors)
-
 ## Ejecucion
 compilacion con openMPI:
 
