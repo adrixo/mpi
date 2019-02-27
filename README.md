@@ -105,5 +105,5 @@ Ejecucion en 4 procesos en un sistema monoprocesador:
   cada elemento tiene un num. dist de entradas. cada entrada es también un vector
    - int MPI_Type_indexed(int count, int * array_of_blocklengths, int * array_of_displacements, MPI_Datatype oldtype, MPI_Datatype * newtype)
 
-###Correspondencia de tipos:
+### Correspondencia de tipos:
   Es posible recibir datos de un tipo distinto al que se envía.
