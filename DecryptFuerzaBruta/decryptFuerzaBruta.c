@@ -76,6 +76,7 @@ void main(int argc , char **argv)
       generarKeyList(keyList);
       printClaves(keyList, seed);
 
+//!! A partir de aqui esta pseudocodigo, creo que falta una forma de indicar que n clave esta descifrando y los tipos de datos de comunicacion 
     //busqueda de Claves
       //Inciiamos con una tarea para todos los procesos (habria que ver mas tarde si nprocesos > nClaves)
       for(int i=1; i<iNumProcs; i++){
