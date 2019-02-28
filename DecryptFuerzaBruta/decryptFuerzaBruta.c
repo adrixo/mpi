@@ -35,13 +35,13 @@ void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontra
 void printResultados(int repeticiones, double tiempoTotal);
 // char *crypt(const char *key, const char *salt);
 
-/*
- * 1. Declaraciones e inicio conteo tiempos
- * 2. Generamos claves aleatorias en la keyList
- * 3. mientras clavesEncontradas < N_CLAVES
- *  3.1 encontramos una clave que case
- *  3.2 añadimos a encontradas y repetimos
- * 4. presentamos resultados
+/* Secuencial:
+ *  1. Declaraciones e inicio conteo tiempos
+ *  2. Generamos claves aleatorias en la keyList
+ *  3. mientras clavesEncontradas < N_CLAVES
+ *   3.1 encontramos una clave que case
+ *   3.2 añadimos a encontradas y repetimos
+ *  4. presentamos resultados
  */
 void main(int argc , char **argv)
 {
@@ -55,6 +55,16 @@ void main(int argc , char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &iId);
   MPI_Comm_size(MPI_COMM_WORLD, &iNumProcs);
 
+
+  /* Podemos realizar el paso de las claves de 2 maneras:
+   *  1. Pasar la clave como string de padre -> hijo
+   *  2. Que todos conozcan todas las claves y el padre solo notifique al hijo 
+   *     cual es el n de la que tiene que resolver. En este esquema se hace esto último
+   */
+  srand(seed);
+  char keyList[PASSWORDS][2][CRYPTED_LENGTH]; //Lista clave-claveEncriptada que maneja el proceso principal
+  generarKeyList(keyList); //si eso lo realizamos en todo los procesos con la misma seed tendriamos la misma clave para todos y no necesitariamos el paso de mensajes
+
   switch(iId){
 
     case 0: //padre
@@ -62,8 +72,6 @@ void main(int argc , char **argv)
     //Declaracion variables padre
       double clock_start, clock_end, tiempoTotal;
       clock_start=MPI_Wtime();
-      srand(seed);
-      char keyList[PASSWORDS][2][CRYPTED_LENGTH]; //Lista clave-claveEncriptada que maneja el proceso principal
       int clavesEncontradas[PASSWORDS]; 
             /* entendido como otra columna de keyList almacena -1 si una clave no ha sido encontrada y nProceso que la encontró en caso contrario. 
              * p.e: cE[2] = 4 <-> La clave 3 fue encontrada por el proceso 4 
@@ -76,10 +84,10 @@ void main(int argc , char **argv)
 
       int nClavesEncontradas = 0; //nClaves encontradas
       int ultimaClave=0;
-      int procAsignadoA[iNumProcs]; //Cada proceso i se asigna a una clave a desencriptar, -1 si esta inactivo. 
+      int procAsignadoA[iNumProcs]; //Cada proceso i se asigna a una clave a desencriptar, -1 si esta inactivo.
 
     //generacion claves
-      generarKeyList(keyList);
+      //generarKeyList(keyList); //si eso lo realizamos en todo los procesos con la misma seed tendriamos la misma clave para todos y no necesitariamos el paso de mensajes
       printClaves(keyList, seed);
 
 //!! A partir de aqui esta pseudocodigo, creo que falta una forma de indicar que n clave esta descifrando y los tipos de datos de comunicacion 
