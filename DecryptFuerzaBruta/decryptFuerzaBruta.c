@@ -23,6 +23,8 @@
 #define MAX_RAND 9999999
 */
 
+#define TAM_MENSAJE 5
+
 //se resolverá generando numeros aleatorios de 0..0 a 9..9
 
 void generarKeyList(char keyList[PASSWORDS][2][CRYPTED_LENGTH]);
@@ -50,11 +52,18 @@ void main(int argc , char **argv)
   char *claveDesencriptada;
   int iId;
   int iNumProcs;
- 
+
+  int mensajeNumClave[TAM_MENSAJE]; //supongamos por ejemplo que en el primer campo esta el n clave y en el segundo el n repeticiones 
+  MPI_Datatype tipo_numClave;
+  MPI_Status status;
+  MPI_Request request;
+
   MPI_Init (&argc ,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &iId);
   MPI_Comm_size(MPI_COMM_WORLD, &iNumProcs);
 
+  MPI_Type_vector(TAM_MENSAJE, 1, 1, MPI_INT, &tipo_numClave);
+  MPI_Type_commit(&tipo_numClave);
 
   /* Podemos realizar el paso de las claves de 2 maneras:
    *  1. Pasar la clave como string de padre -> hijo
@@ -92,39 +101,46 @@ void main(int argc , char **argv)
 
 //!! A partir de aqui esta pseudocodigo, creo que falta una forma de indicar que n clave esta descifrando y los tipos de datos de comunicacion 
     //busqueda de Claves
-      //Inciiamos con una tarea para todos los procesos (habria que ver mas tarde si nprocesos > nClaves, p. ej: uso de j para ciclos)
+      //Iniciamos con una tarea para todos los procesos (habria que ver mas tarde si nprocesos > nClaves, p. ej: uso de j para ciclos)
       j = 0;
       for(int i=1; i<iNumProcs; i++){
-        if(i>=PASSWORDS)
+        if(i>=PASSWORDS){
           j = PASSWORDS; //si i es mayor que el n procesos empezariamos a asignar claves otra vez desde la n 0
-        MPI_Send(clave n (i-j) a proceso i); //no bloqueante
+        }
+        mensajeNumClave[0] = i-j; //n clave a desencriptar
+        MPI_Send(mensajeNumClave,1,tipo_numClave,i,10,MPI_COMM_WORLD); //no bloqueante, clave n (i-j) a proceso i
         procAsignadoA[i] = nClave;
       }
 
       nClavesEncontradas = 0;
       do {
-        MPI_Recv(esperamos recibir claveDesencriptada) //bloqueante
+       MPI_Recv(mensajeNumClave, 1, tipo_numClave, /*global*/, 10, MPI_COMM_WORLD, &status); //bloqueante, esperamos recibir clave desencriptada
 
-        if(recibimos claveDesencriptada){//no se si habria que comprobar si ya ha sido resuelta previamente
+        if(mensajeNumClave[0] >= 0 && mensajeNumClave[0] < PASSWORDS){//recibimos n clave desencriptada, no se si habria que comprobar si ya ha sido resuelta previamente
         //1. desactivamos los procesos que esten con esa tarea
           for(i=1; i<iNumProcs; i++){
-            if(procAsignadoA[i]==nClaveDesencriptada){
-              MPI_ISend(interrupcion proceso i); //no bloqueante
+            if(procAsignadoA[i]==mensajeNumClave[0]){
+              mensajeNumClave[0] = -1; //por ejemplo para la interrupcion, no se como sería todavia
+              MPI_Isend( mensajeNumClave, 1, tipo_numClave, i, 10, MPI_COMM_WORLD, &request); // no bloqueante, interrupcion proceso i
+              //MPI_Wait(&request, &status); // Si sale de Wait, el mensaje ha sido enviado, no se si habria que utilizarlo
               procAsignadoA[i] = -1; //lo desasignamos
             }
           }
 
         //2. marcamos esa contraseña como desencriptada
-          marcarDesencriptada(keyList, clavesEncontradas, claveDesencriptada, //proceso que la desencripto);
+          //marcarDesencriptada(keyList, clavesEncontradas, claveDesencriptada, //proceso que la desencripto);
+          // ó dependiendo de la implementacion:
+          clavesEncontradas[mensajeNumClave[0]] = /*proceso del que se ha recibido*/; //la marcamos como 
           nClavesEncontradas++;
 
         //3. Mandamos nuevos recados a los procesos que quedaron inactivos
           for(i=1; i<iNumProcs; i++){
             if(procAsignadoA[i]==-1){
-              clave por descifrar = obtenerClaveADesencriptar(clavesEncontradas);
-              MPI_ISend( clave por descifrar a i ); //no bloqueante
-              procAsignadoA[i] = clave por descifrar;
-              clavesEncontradas[clave por descifrar] += -1;
+              mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
+              MPI_Isend( mensajeNumClave, 1, tipo_numClave, i, 10, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
+              //MPI_Wait(&request, &status); // Si sale de Wait, el mensaje ha sido enviado, no se si habria que utilizarlo
+              procAsignadoA[i] = mensajeNumClave[0];
+              clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1, si entendiamos que -1 era que no se habia encontrado, podemos entender -x como que x procesos (x-1 en realida) estan con esa tarea, por optimizacion
             }
           }
         }
@@ -141,12 +157,14 @@ void main(int argc , char **argv)
 
     default: //hijos
     {
-      srand(iId*100); //aqui iniciamos el seed rand por ejemplo
+      srand(iId*100); //aqui iniciamos el seed de cada hijo rand por ejemplo
       do {
-        repeticiones++;
-        MPI_Recv(clave, 0);
-        claveDesencriptada = desencriptarClave(clave, &repeticiones);
-        MPI_ISend(clave encontrada,0);
+        repeticiones=0;
+        MPI_Recv( mensajeNumClave,1,tipo_numClave,0,10,MPI_COMM_WORLD,&status);	
+        claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave[0] ][1], &repeticiones);
+        mensajeNumClave[1] = repeticiones;
+        MPI_Isend( mensajeNumClave, 1, tipo_numClave, 0, 10, MPI_COMM_WORLD, &request);
+        //MPI_Wait(&request, &status); // Si sale de Wait, el mensaje ha sido enviado, no se si habria que utilizarlo
       } while(repeticiones<(MAX_RAND*2)); //manejar interrupciones y ver cuando acaba proceso main !!!!!!!!
       break;
     }
