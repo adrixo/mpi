@@ -26,6 +26,7 @@
 //se resolverá generando numeros aleatorios de 0..0 a 9..9
 
 void generarKeyList(char keyList[PASSWORDS][2][CRYPTED_LENGTH]);
+int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]);
 char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones);
 void marcarDesencriptada(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], char claveDesencriptada[KEY_LENGTH+1], int proceso);
 
@@ -45,32 +46,37 @@ void printResultados(int repeticiones, double tiempoTotal);
 void main(int argc , char **argv)
 {
   int seed=9999;
-  int i, repeticiones = 0;
+  int i, j, repeticiones = 0;
   char *claveDesencriptada;
   int iId;
   int iNumProcs;
-
+ 
   MPI_Init (&argc ,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &iId);
   MPI_Comm_size(MPI_COMM_WORLD, &iNumProcs);
 
   switch(iId){
-    case 0:
-      ;
+
+    case 0: //padre
+    {
     //Declaracion variables padre
       double clock_start, clock_end, tiempoTotal;
       clock_start=MPI_Wtime();
       srand(seed);
       char keyList[PASSWORDS][2][CRYPTED_LENGTH]; //Lista clave-claveEncriptada que maneja el proceso principal
-      int clavesEncontradas[PASSWORDS]; //entendido como otra columna de keyList almacena -1 si una clave no ha sido encontrada y nProceso que la encontró en caso contrario
-
-      int nClavesEncontradas = 0; //nClaves encontradas
-      int ultimaClave=0;
-      int procAsignadoA[iNumProcs]; //Cada proceso i se asigna a una clave, -1 si esta inactivo
+      int clavesEncontradas[PASSWORDS]; 
+            /* entendido como otra columna de keyList almacena -1 si una clave no ha sido encontrada y nProceso que la encontró en caso contrario. 
+             * p.e: cE[2] = 4 <-> La clave 3 fue encontrada por el proceso 4 
+             * Podría tambien ponerse -x siendo x el numero de procesos tratando de desencriptar una clave
+             */
 
       for(i=0; i<PASSWORDS; i++){
         clavesEncontradas[i]=-1;
       }
+
+      int nClavesEncontradas = 0; //nClaves encontradas
+      int ultimaClave=0;
+      int procAsignadoA[iNumProcs]; //Cada proceso i se asigna a una clave a desencriptar, -1 si esta inactivo. 
 
     //generacion claves
       generarKeyList(keyList);
@@ -78,9 +84,12 @@ void main(int argc , char **argv)
 
 //!! A partir de aqui esta pseudocodigo, creo que falta una forma de indicar que n clave esta descifrando y los tipos de datos de comunicacion 
     //busqueda de Claves
-      //Inciiamos con una tarea para todos los procesos (habria que ver mas tarde si nprocesos > nClaves)
+      //Inciiamos con una tarea para todos los procesos (habria que ver mas tarde si nprocesos > nClaves, p. ej: uso de j para ciclos)
+      j = 0;
       for(int i=1; i<iNumProcs; i++){
-        MPI_Send(clave i a proceso i); //no bloqueante
+        if(i>=PASSWORDS)
+          j = PASSWORDS; //si i es mayor que el n procesos empezariamos a asignar claves otra vez desde la n 0
+        MPI_Send(clave n (i-j) a proceso i); //no bloqueante
         procAsignadoA[i] = nClave;
       }
 
@@ -90,7 +99,7 @@ void main(int argc , char **argv)
 
         if(recibimos claveDesencriptada){//no se si habria que comprobar si ya ha sido resuelta previamente
         //1. desactivamos los procesos que esten con esa tarea
-          for(int i=1; i<iNumProcs; i++){
+          for(i=1; i<iNumProcs; i++){
             if(procAsignadoA[i]==nClaveDesencriptada){
               MPI_ISend(interrupcion proceso i); //no bloqueante
               procAsignadoA[i] = -1; //lo desasignamos
@@ -102,10 +111,12 @@ void main(int argc , char **argv)
           nClavesEncontradas++;
 
         //3. Mandamos nuevos recados a los procesos que quedaron inactivos
-          for(int i=1; i<iNumProcs; i++){
+          for(i=1; i<iNumProcs; i++){
             if(procAsignadoA[i]==-1){
-              MPI_ISend(clave por descifrar); //no bloqueante
+              clave por descifrar = obtenerClaveADesencriptar(clavesEncontradas);
+              MPI_ISend( clave por descifrar a i ); //no bloqueante
               procAsignadoA[i] = clave por descifrar;
+              clavesEncontradas[clave por descifrar] += -1;
             }
           }
         }
@@ -118,16 +129,19 @@ void main(int argc , char **argv)
       tiempoTotal = (clock_end - clock_start);// / (double) CLOCKS_PER_SEC;
       printResultados(repeticiones, tiempoTotal);
       break;
+    }
 
     default: //hijos
+    {
+      srand(iId*100); //aqui iniciamos el seed rand por ejemplo
       do {
-        srand(iId*100); //aqui iniciamos el rand por ejemplo
         repeticiones++;
         MPI_Recv(clave, 0);
         claveDesencriptada = desencriptarClave(clave, &repeticiones);
         MPI_ISend(clave encontrada,0);
-      } while(repeticiones<10); //manejar interrupciones y ver cuando acaba proceso main !!!!!!!!
+      } while(repeticiones<(MAX_RAND*2)); //manejar interrupciones y ver cuando acaba proceso main !!!!!!!!
       break;
+    }
   }
 
   MPI_Finalize();
@@ -176,6 +190,30 @@ void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontra
 
 void printResultados(int repeticiones, double tiempoTotal){
   printf("\nTerminado\n \tRepetciones: %d \n \tTiempo: %f \n\n", repeticiones, tiempoTotal);
+}
+
+/*
+ * Devuelve el n de una clave que no ha sido encontrada todavía
+ * Para evitar demasiados menajes podia ser mejorado evitando 
+ * que fuese tan secuencial.
+ */
+int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]){
+  int i;
+
+//Mejora, primero los que no estan siendo resueltos por ninguno
+  for(i=0; i<PASSWORDS; i++){
+    if(clavesEncontradas[i] == -1){
+      return i;
+    }
+  }
+
+  for(i=0; i<PASSWORDS; i++){
+    if(clavesEncontradas[i] < -1){
+      return i;
+    }
+  }
+
+  return -1;
 }
 
 /*
