@@ -29,7 +29,7 @@
 
 void generarKeyList(char keyList[PASSWORDS][2][CRYPTED_LENGTH]);
 int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]);
-char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones);
+char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones, MPI_Status *statusInterrupcion);
 void marcarDesencriptada(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], char claveDesencriptada[KEY_LENGTH+1], int proceso);
 
 void printClaves(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int seed);
@@ -54,16 +54,17 @@ void main(int argc , char **argv)
   int iNumProcs;
 
   int mensajeNumClave[TAM_MENSAJE]; //supongamos por ejemplo que en el primer campo esta el n clave y en el segundo el n repeticiones 
-  MPI_Datatype tipo_numClave;
+  MPI_Datatype tipo_mensajeNumClave;
   MPI_Status status;
+  MPI_Status statusInterrupcion;
   MPI_Request request;
 
   MPI_Init (&argc ,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &iId);
   MPI_Comm_size(MPI_COMM_WORLD, &iNumProcs);
 
-  MPI_Type_vector(TAM_MENSAJE, 1, 1, MPI_INT, &tipo_numClave);
-  MPI_Type_commit(&tipo_numClave);
+  MPI_Type_vector(TAM_MENSAJE, 1, 1, MPI_INT, &tipo_mensajeNumClave);
+  MPI_Type_commit(&tipo_mensajeNumClave);
 
   /* Podemos realizar el paso de las claves de 2 maneras:
    *  1. Pasar la clave como string de padre -> hijo
@@ -108,20 +109,20 @@ void main(int argc , char **argv)
           j = PASSWORDS; //si i es mayor que el n procesos empezariamos a asignar claves otra vez desde la n 0
         }
         mensajeNumClave[0] = i-j; //n clave a desencriptar
-        MPI_Send(mensajeNumClave,1,tipo_numClave,i,10,MPI_COMM_WORLD); //no bloqueante, clave n (i-j) a proceso i
+        MPI_Send(mensajeNumClave,1,tipo_mensajeNumClave,i,10,MPI_COMM_WORLD); //no bloqueante, clave n (i-j) a proceso i
         procAsignadoA[i] = nClave;
       }
 
       nClavesEncontradas = 0;
       do {
-       MPI_Recv(mensajeNumClave, 1, tipo_numClave, /*global*/, 10, MPI_COMM_WORLD, &status); //bloqueante, esperamos recibir clave desencriptada
+       MPI_Recv(mensajeNumClave, 1, tipo_mensajeNumClave, /*global*/, 10, MPI_COMM_WORLD, &status); //bloqueante, esperamos recibir clave desencriptada
 
         if(mensajeNumClave[0] >= 0 && mensajeNumClave[0] < PASSWORDS){//recibimos n clave desencriptada, no se si habria que comprobar si ya ha sido resuelta previamente
         //1. desactivamos los procesos que esten con esa tarea
           for(i=1; i<iNumProcs; i++){
             if(procAsignadoA[i]==mensajeNumClave[0]){
               mensajeNumClave[0] = -1; //por ejemplo para la interrupcion, no se como sería todavia
-              MPI_Isend( mensajeNumClave, 1, tipo_numClave, i, 10, MPI_COMM_WORLD, &request); // no bloqueante, interrupcion proceso i
+              MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, i, 10, MPI_COMM_WORLD, &request); // no bloqueante, interrupcion proceso i
               //MPI_Wait(&request, &status); // Si sale de Wait, el mensaje ha sido enviado, no se si habria que utilizarlo
               procAsignadoA[i] = -1; //lo desasignamos
             }
@@ -137,7 +138,7 @@ void main(int argc , char **argv)
           for(i=1; i<iNumProcs; i++){
             if(procAsignadoA[i]==-1){
               mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
-              MPI_Isend( mensajeNumClave, 1, tipo_numClave, i, 10, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
+              MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, i, 10, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
               //MPI_Wait(&request, &status); // Si sale de Wait, el mensaje ha sido enviado, no se si habria que utilizarlo
               procAsignadoA[i] = mensajeNumClave[0];
               clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1, si entendiamos que -1 era que no se habia encontrado, podemos entender -x como que x procesos (x-1 en realida) estan con esa tarea, por optimizacion
@@ -155,15 +156,18 @@ void main(int argc , char **argv)
       break;
     }
 
-    default: //hijos
+    default: //hijos https://lsi.ugr.es/jmantas/ppr/ayuda/mpi_ayuda.php?ayuda=MPI_Test manejo de interrupciones
     {
+      int nClaveADesencriptar; 
       srand(iId*100); //aqui iniciamos el seed de cada hijo rand por ejemplo
       do {
         repeticiones=0;
-        MPI_Recv( mensajeNumClave,1,tipo_numClave,0,10,MPI_COMM_WORLD,&status);	
-        claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave[0] ][1], &repeticiones);
+        MPI_Recv( mensajeNumClave,1,tipo_mensajeNumClave,0,10,MPI_COMM_WORLD, &status);
+        nClaveADesencriptar = mensajeNumClave[0];
+	MPI_Irecv(mensajeNumClave,1,tipo_mensajeNumClave,0,10,MPI_COMM_WORLD, &statusInterrupcion); //Si un mensaje de interrupcion llegase 
+        claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave[0] ][1], &repeticiones, &statusInterrupcion);
         mensajeNumClave[1] = repeticiones;
-        MPI_Isend( mensajeNumClave, 1, tipo_numClave, 0, 10, MPI_COMM_WORLD, &request);
+        MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, 0, 10, MPI_COMM_WORLD, &request);
         //MPI_Wait(&request, &status); // Si sale de Wait, el mensaje ha sido enviado, no se si habria que utilizarlo
       } while(repeticiones<(MAX_RAND*2)); //manejar interrupciones y ver cuando acaba proceso main !!!!!!!!
       break;
@@ -246,16 +250,25 @@ int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]){
  * Dada una clave encriptada, mediante fuerza bruta va encriptando posibles claves y comparando
  * La semilla de rand se tiene que seleccionar previamente.
  *
+ * mediante statusItnerrupcion y test podemos comprobar si ha llegado una interrupcion
+ *
  * Devuelve la clave que al encriptarse coincide.
  */
-char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones){
+char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones, MPI_Status *statusInterrupcion){
   char * claveDesencriptada;
   claveDesencriptada = malloc((KEY_LENGTH+1)*sizeof(char));
   int randNum;
+  int haTerminado;
 
   while(1){
     (*repeticiones)++;
 
+//1. probamos si ha habido interrupcion con int MPI_Test(MPI_Request* peticion, int * flag, MPI_Status* status)
+    haTerminado = MPI_TEST(MPI_Request *peticion, int *flag, MPI_Status* status);
+    if(haTerminado)
+      return "cancelar";
+
+//2. probamos un codigo
     randNum =  rand()%MAX_RAND;
     //para evitar que se sustituya 0X por X
     if(randNum >= MIN_RAND){
