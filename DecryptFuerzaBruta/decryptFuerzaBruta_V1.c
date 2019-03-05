@@ -272,14 +272,19 @@ void printMonitor(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int clavesEnc
 void printResultados(unsigned int repeticiones, double tiempoTotal, int iNumProcs){
   int tamanoClave=0;
   for(int i = MAX_RAND; i>0; i /= 10) tamanoClave++;
+  
+  int longNombreProc;
+  char nombreProc[MPI_MAX_PROCESSOR_NAME];
+  MPI_Get_processor_name(nombreProc, &longNombreProc);
 
-  printf("\nCASO:\n - Claves  : %d \n - Tamanio : %d \n - procesos: %d + padre\n\nRESULTADO:\n - Repeticiones: %d \n - Tiempo: %f \n\n", NUM_CLAVES, tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
+  printf("\nCASO:\n - Procesador: %s \n - Claves  : %d \n - Tamanio : %d \n - procesos: %d + padre\n\nRESULTADO:\n - Repeticiones: %d \n - Tiempo: %f \n\n", nombreProc, NUM_CLAVES, tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
+
 
   FILE *fd;
   char * filename = malloc((32)*sizeof(char));
   char * contenido = malloc((1024)*sizeof(char));
   char * datos = malloc((512)*sizeof(char));
-  sprintf(filename, "%d_claves.txt\0", NUM_CLAVES);
+  sprintf(filename, "%d_claves.odt\0", NUM_CLAVES);
   char cabecera[128] = "tamano; numeroProcesos; repeticiones; tiempoTotal;";
   sprintf(datos,      "%d; %d; %d; %f;",tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
 
