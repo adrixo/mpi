@@ -18,7 +18,7 @@
 #define SALT "aa"
 #define KEY_LENGTH 7 //Tenemos 20 claves encriptadas de 7 caracteres que contienen solo cifras.
 #define CRYPTED_LENGTH 14 //el tamaño de una contraseña encriptada es 13+1
-#define PASSWORDS 4 //numero de claves a generar
+#define NUM_CLAVES 4 //numero de claves a generar
 #define MIN_RAND 100000 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
 #define MAX_RAND 999999
 /*
@@ -30,19 +30,19 @@
 
 //se resolverá generando numeros aleatorios de 0..0 a 9..9
 
-void generarKeyList(char keyList[PASSWORDS][2][CRYPTED_LENGTH]);
-int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]);
+void generarKeyList(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH]);
+int obtenerClaveADesencriptar(int clavesEncontradas[NUM_CLAVES]);
 char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones);
-void marcarDesencriptada(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], char claveDesencriptada[KEY_LENGTH+1], int proceso);
+void marcarDesencriptada(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int clavesEncontradas[NUM_CLAVES], char claveDesencriptada[KEY_LENGTH+1], int proceso);
 
-void printClaves(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int seed);
-void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], int *procAsignadoA, int iNumProcs);
+void printClaves(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int seed);
+void printMonitor(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int clavesEncontradas[NUM_CLAVES], int *procAsignadoA, int iNumProcs);
 void printResultados(unsigned int repeticiones, double tiempoTotal, int iNumProcs);
 // char *crypt(const char *key, const char *salt);
 
 /* Secuencial:
  *  1. Declaraciones e inicio conteo tiempos
- *  2. Generamos claves aleatorias en la keyList
+ *  2. Generamos claves aleatorias en la listaClaves
  *  3. mientras clavesEncontradas < N_CLAVES
  *   3.1 encontramos una clave que case
  *   3.2 añadimos a encontradas y repetimos
@@ -71,8 +71,8 @@ void main(int argc , char **argv)
    *     cual es el n de la que tiene que resolver. En este esquema se hace esto último
    */
   srand(seed);
-  char keyList[PASSWORDS][2][CRYPTED_LENGTH]; //Lista clave-claveEncriptada que maneja el proceso principal
-  generarKeyList(keyList); //si eso lo realizamos en todo los procesos con la misma seed tendriamos la misma clave para todos y no necesitariamos el paso de mensajes
+  char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH]; //Lista clave-claveEncriptada que maneja el proceso principal
+  generarKeyList(listaClaves); //si eso lo realizamos en todo los procesos con la misma seed tendriamos la misma clave para todos y no necesitariamos el paso de mensajes
 
   switch(iId){
 
@@ -81,13 +81,13 @@ void main(int argc , char **argv)
     //Declaracion variables padre
       double clock_start, clock_end, tiempoTotal;
       clock_start=MPI_Wtime();
-      int clavesEncontradas[PASSWORDS];
-            /* entendido como otra columna extra de keyList almacena -1 si una clave no ha sido encontrada y nProceso que la encontró en caso contrario.
+      int clavesEncontradas[NUM_CLAVES];
+            /* entendido como otra columna extra de listaClaves almacena -1 si una clave no ha sido encontrada y nProceso que la encontró en caso contrario.
              * p.e: cE[2] = 4 <-> La clave 3 fue encontrada por el proceso 4
              * En caso de no haber sido resuelta almacena un -x siendo
              * x-1 el numero de procesos tratando de desencriptar una clave
              */
-      for(i=0; i<PASSWORDS; i++){
+      for(i=0; i<NUM_CLAVES; i++){
         clavesEncontradas[i]=-1; //lo inicializamos marcando a todas como no resuelta
       }
 
@@ -100,8 +100,8 @@ void main(int argc , char **argv)
       }
 
     //generacion claves
-      //generarKeyList(keyList); //se hace fuera del switch, si eso lo realizamos en todo los procesos con la misma seed tendriamos la misma clave para todos y no necesitariamos el paso de mensajes
-      printClaves(keyList, seed);
+      //generarKeyList(listaClaves); //se hace fuera del switch, si eso lo realizamos en todo los procesos con la misma seed tendriamos la misma clave para todos y no necesitariamos el paso de mensajes
+      printClaves(listaClaves, seed);
 
     //busqueda de Claves
       //Iniciamos con una tarea para todos los procesos (tener en cuenta si nprocesos > nClaves)
@@ -112,10 +112,10 @@ void main(int argc , char **argv)
         MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, i, TAG, MPI_COMM_WORLD);
       }
 
-      printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
+      printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
 
       nClavesEncontradas = 0;
-      while (nClavesEncontradas < PASSWORDS)
+      while (nClavesEncontradas < NUM_CLAVES)
       {
         MPI_Recv(&mensajeNumClave, 1, MPI_UNSIGNED, MPI_ANY_SOURCE/*global*/, TAG, MPI_COMM_WORLD, &status); //bloqueante, esperamos recibir clave desencriptada
 
@@ -124,16 +124,16 @@ void main(int argc , char **argv)
         //manejar repeticiones
 
         if(numClaveDesencriptada >= 0 &&
-           numClaveDesencriptada < PASSWORDS &&
+           numClaveDesencriptada < NUM_CLAVES &&
            clavesEncontradas[numClaveDesencriptada] < 0 ){//recibimos n clave desencriptada, esta no debe haberse resuelto anteriormente
 
         //1. marcamos esa contraseña como desencriptada, dos opciones dependiendo de implementacion:
-          //marcarDesencriptada(keyList, clavesEncontradas, claveDesencriptada, procesoDesencriptador); //si se envia la clave en vez de n clave
+          //marcarDesencriptada(listaClaves, clavesEncontradas, claveDesencriptada, procesoDesencriptador); //si se envia la clave en vez de n clave
           clavesEncontradas[numClaveDesencriptada] = procesoDesencriptador; //la marcamos como resuelta //si se envia el num clave en vez de la clave
           nClavesEncontradas++;
           //faltaría manejar repeticiones
 
-          if(nClavesEncontradas < PASSWORDS) //solo si quedan
+          if(nClavesEncontradas < NUM_CLAVES) //solo si quedan
         //2. Mandamos recados los procesos que estaban trabajando con la clave desencriptada, estos pasarian a desencriptar la nueva clave
             for(i=1; i<iNumProcs; i++)
             {
@@ -148,7 +148,7 @@ void main(int argc , char **argv)
             }
         } //fi
 
-        printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
+        printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
       } //while
 
     //finalizamos
@@ -158,7 +158,7 @@ void main(int argc , char **argv)
       printf("\n\tFINALIZADO - RECIBIENDO REPETICIONES DE LOS PROCESOS\n");
       //Matamos a los procesos
       for(int i=1; i<iNumProcs; i++){
-        mensajeNumClave = PASSWORDS + 1; //si el mensaje contiene una contraseña no valida (maximo + 1 por ejemplo) terminamos
+        mensajeNumClave = NUM_CLAVES + 1; //si el mensaje contiene una contraseña no valida (maximo + 1 por ejemplo) terminamos
         MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, i, TAG, MPI_COMM_WORLD);
       }
 
@@ -173,7 +173,7 @@ void main(int argc , char **argv)
       }
       printf("\tRepeticiones Total: %d - %f%% (sobre UINT_MAX)\n", totalRepeticiones, (float) totalRepeticiones / INT_MAX);
 
-      printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
+      printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
       printResultados(totalRepeticiones, tiempoTotal, iNumProcs);
 
 
@@ -197,11 +197,11 @@ void main(int argc , char **argv)
       while(1) { //por seguridad he puesto un límite, pero seria bucle infinito
         MPI_Recv( &mensajeNumClave, 1, MPI_UNSIGNED, 0, TAG, MPI_COMM_WORLD, &status);
 
-        if(mensajeNumClave ==  PASSWORDS + 1)
+        if(mensajeNumClave ==  NUM_CLAVES + 1)
           break; //si el mensaje contiene una contraseña no valida (maximo + 1 por ejemplo) terminamos
 
         nClaveADesencriptar = mensajeNumClave;
-        claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave ][1], &repeticiones);
+        claveDesencriptada = desencriptarClave( listaClaves[ mensajeNumClave ][1], &repeticiones);
 
         //Si la clave ha sido desencriptada enviamos, en caso contrario (ha sido resuelta por otro) volvemos al recv a recibir la nueva a desencriptar
         if(strcmp(claveDesencriptada, "cancel") == 0){
@@ -228,40 +228,40 @@ void main(int argc , char **argv)
 /*
  * Llena una matriz string 20x2 aleatoriamente: clave / clave encriptada
  */
-void generarKeyList(char keyList[PASSWORDS][2][CRYPTED_LENGTH]){
+void generarKeyList(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH]){
   int i;
   int randNum;
 
-  for(i=0; i<PASSWORDS; i++){
+  for(i=0; i<NUM_CLAVES; i++){
     randNum =  rand()%MAX_RAND;
     //para evitar que se sustituya 0X por X
     if(randNum > MIN_RAND){
-      sprintf(keyList[i][0], "%d", randNum);
+      sprintf(listaClaves[i][0], "%d", randNum);
     }
     else {
-      sprintf(keyList[i][0], "%d", randNum+MIN_RAND);
-      keyList[i][0][0] = '0';
+      sprintf(listaClaves[i][0], "%d", randNum+MIN_RAND);
+      listaClaves[i][0][0] = '0';
     }
 
-    strcpy(keyList[i][1], crypt(keyList[i][0], SALT));
+    strcpy(listaClaves[i][1], crypt(listaClaves[i][0], SALT));
   }
 
 }
 
 // Imprime las claves
-void printClaves(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int seed){
+void printClaves(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int seed){
   int i;
     printf("\n--Claves generadas con semilla %d--\n\tRango: %d - %d\n", seed, 0, MAX_RAND);
-  for(i=0; i<PASSWORDS; i++){
-    printf("%02d) %s %s\n", i, keyList[i][0], keyList[i][1]);
+  for(i=0; i<NUM_CLAVES; i++){
+    printf("%02d) %s %s\n", i, listaClaves[i][0], listaClaves[i][1]);
   }
 }
 
-void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], int *procAsignadoA, int iNumProcs){
+void printMonitor(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int clavesEncontradas[NUM_CLAVES], int *procAsignadoA, int iNumProcs){
   int i;
   printf("\n---------------------\n");
-  for(i=0; i<PASSWORDS; i++){
-    printf("%02d) %s %s -> (%d)\n", i, keyList[i][0], keyList[i][1], clavesEncontradas[i]);
+  for(i=0; i<NUM_CLAVES; i++){
+    printf("%02d) %s %s -> (%d)\n", i, listaClaves[i][0], listaClaves[i][1], clavesEncontradas[i]);
   }
   printf("\n-------Procesos------\n");
   for(i=0; i<iNumProcs; i++){
@@ -273,13 +273,13 @@ void printResultados(unsigned int repeticiones, double tiempoTotal, int iNumProc
   int tamanoClave=0;
   for(int i = MAX_RAND; i>0; i /= 10) tamanoClave++;
 
-  printf("\nCASO:\n - Claves  : %d \n - Tamanio : %d \n - procesos: %d + padre\n\nRESULTADO:\n - Repeticiones: %d \n - Tiempo: %f \n\n", PASSWORDS, tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
+  printf("\nCASO:\n - Claves  : %d \n - Tamanio : %d \n - procesos: %d + padre\n\nRESULTADO:\n - Repeticiones: %d \n - Tiempo: %f \n\n", NUM_CLAVES, tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
 
   FILE *fd;
   char * filename = malloc((32)*sizeof(char));
   char * contenido = malloc((1024)*sizeof(char));
   char * datos = malloc((512)*sizeof(char));
-  sprintf(filename, "%d_claves.txt\0", PASSWORDS);
+  sprintf(filename, "%d_claves.txt\0", NUM_CLAVES);
   char cabecera[128] = "tamano; numeroProcesos; repeticiones; tiempoTotal;";
   sprintf(datos,      "%d; %d; %d; %f;",tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
 
@@ -303,11 +303,11 @@ void printResultados(unsigned int repeticiones, double tiempoTotal, int iNumProc
  * la que mayor numero negativo tenga
  * (-1 son 0 procesos asignados, -3 son 2 procesos asignados)
  */
-int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]){
+int obtenerClaveADesencriptar(int clavesEncontradas[NUM_CLAVES]){
   int i;
   int claveConMenorNumProcesos=0;
 
-  for(i=0; i<PASSWORDS; i++){
+  for(i=0; i<NUM_CLAVES; i++){
     if( clavesEncontradas[i] < 0){ //de las negativas
       if(clavesEncontradas[i] >= clavesEncontradas[claveConMenorNumProcesos]) //la mayor
         claveConMenorNumProcesos = i;
@@ -362,13 +362,13 @@ char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones
 }
 
 /*
- * Dada una claveDesencriptada, busca la clave en la keyList que coincida y añade el proceso que la descubrió a clavesEncontradas
+ * Dada una claveDesencriptada, busca la clave en la listaClaves que coincida y añade el proceso que la descubrió a clavesEncontradas
  */
-void marcarDesencriptada(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS],char claveDesencriptada[KEY_LENGTH+1], int proceso){
+void marcarDesencriptada(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int clavesEncontradas[NUM_CLAVES],char claveDesencriptada[KEY_LENGTH+1], int proceso){
   int i;
 
-  for(i=0; i<PASSWORDS; i++){
-    if(strcmp(keyList[i][0], claveDesencriptada) == 0){
+  for(i=0; i<NUM_CLAVES; i++){
+    if(strcmp(listaClaves[i][0], claveDesencriptada) == 0){
       clavesEncontradas[i]=proceso;
       return;
     }
