@@ -137,8 +137,8 @@ void main(int argc , char **argv)
             if(procAsignadoA[i] == numClaveDesencriptada)
             {
               mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
-              printf("Clave a desencriptar %d por %d\n", mensajeNumClave[0], i);
-              MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
+              printf("Clave a desencriptar %d - %s por %d\n", mensajeNumClave[0], keyList[mensajeNumClave[0]][1], i);
+              MPI_Send( mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD);
 
               procAsignadoA[i] = mensajeNumClave[0];
               clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1 ... vease anterior cE[] += -1
@@ -170,7 +170,8 @@ void main(int argc , char **argv)
       srand(iId*100); //iniciamos el seed de cada hijo rand por ejemplo el id*100
       repeticiones=0; //recogemos las repeticiones
 
-      while(repeticiones<(MAX_RAND*2)) { //por seguridad he puesto un límite, pero seria bucle infinito
+      while(1) { //por seguridad he puesto un límite, pero seria bucle infinito
+        printf("Hijo: Espero mensaje\n");
         MPI_Recv( mensajeNumClave, 1, tipo_mensajeNumClave, 0, TAG, MPI_COMM_WORLD, &status);
         printf("Hijo: Soy %d y me pasan %d\n", iId, mensajeNumClave[0]);
         nClaveADesencriptar = mensajeNumClave[0];
