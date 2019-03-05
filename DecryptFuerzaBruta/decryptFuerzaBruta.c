@@ -136,12 +136,12 @@ void main(int argc , char **argv)
           {
             if(procAsignadoA[i] == numClaveDesencriptada)
             {
+              mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
+              printf("Clave a desencriptar %d por %d\n", mensajeNumClave[0], i);
+              MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
 
               procAsignadoA[i] = mensajeNumClave[0];
               clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1 ... vease anterior cE[] += -1
-              mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
-              printf("mensajeNumClave[0] %d\n", mensajeNumClave[0]);
-              MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
             }
           }
         } //fi
