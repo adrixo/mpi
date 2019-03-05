@@ -18,8 +18,8 @@
 #define KEY_LENGTH 7 //Tenemos 20 claves encriptadas de 7 caracteres que contienen solo cifras.
 #define CRYPTED_LENGTH 14 //el tamaño de una contraseña encriptada es 13+1
 #define PASSWORDS 4 //numero de claves a generar
-#define MIN_RAND 100 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
-#define MAX_RAND 999
+#define MIN_RAND 1000000 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
+#define MAX_RAND 9999999
 /*
 #define MIN_RAND 1000000 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
 #define MAX_RAND 9999999
@@ -35,7 +35,7 @@ char * desencriptarClave(char claveEncriptada[CRYPTED_LENGTH], int *repeticiones
 void marcarDesencriptada(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], char claveDesencriptada[KEY_LENGTH+1], int proceso);
 
 void printClaves(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int seed);
-void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS]);
+void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], int *procAsignadoA, int iNumProcs);
 void printResultados(int repeticiones, double tiempoTotal);
 // char *crypt(const char *key, const char *salt);
 
@@ -94,14 +94,16 @@ void main(int argc , char **argv)
       }
 
       int nClavesEncontradas = 0; //nClaves encontradas
-      int procAsignadoA[iNumProcs]; //Cada proceso i se asigna a una clave a desencriptar, -1 si esta inactivo.
       int numClaveDesencriptada; //numero clave devuelta por un proceso que la ha resuelto
       int procesoDesencriptador;
+      int procAsignadoA[iNumProcs]; //Cada proceso i se asigna a una clave a desencriptar, -1 si esta inactivo.
+      for(i=0; i<iNumProcs; i++){
+        procAsignadoA[i]=-1; //lo inicializamos marcando a todas como no resuelta
+      }
 
     //generacion claves
       //generarKeyList(keyList); //se hace fuera del switch, si eso lo realizamos en todo los procesos con la misma seed tendriamos la misma clave para todos y no necesitariamos el paso de mensajes
       printClaves(keyList, seed);
-      printMonitor(keyList, clavesEncontradas);
 
     //busqueda de Claves
       //Iniciamos con una tarea para todos los procesos (tener en cuenta si nprocesos > nClaves)
@@ -111,7 +113,8 @@ void main(int argc , char **argv)
         clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1, si entendiamos que -1 era que no se habia encontrado, podemos entender -x como que x procesos (x-1 en realida) estan con esa tarea, por optimizacion
         MPI_Send(mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD); //no bloqueante, clave n (i-j) a proceso i
       }
-      printMonitor(keyList, clavesEncontradas);
+
+      printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
 
       nClavesEncontradas = 0;
       while (nClavesEncontradas < PASSWORDS)
@@ -147,13 +150,14 @@ void main(int argc , char **argv)
             }
         } //fi
 
-        printMonitor(keyList, clavesEncontradas);
+        printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
       } //while
 
     //finalizamos
       clock_end = MPI_Wtime();
       tiempoTotal = (clock_end - clock_start);// / (double) CLOCKS_PER_SEC;
-      printMonitor(keyList, clavesEncontradas);
+      printf("\n\tFINALIZADO\n");
+      printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
       printResultados(repeticiones, tiempoTotal);
 
       //matamos a los procesos
@@ -234,11 +238,15 @@ void printClaves(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int seed){
   }
 }
 
-void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS]){
+void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], int *procAsignadoA, int iNumProcs){
   int i;
   printf("\n---------------------\n");
   for(i=0; i<PASSWORDS; i++){
     printf("%02d) %s %s -> (%d)\n", i, keyList[i][0], keyList[i][1], clavesEncontradas[i]);
+  }
+  printf("\n-------Procesos------\n");
+  for(i=0; i<iNumProcs; i++){
+    printf("Proceso %d resolviendo clave %d\n", i, procAsignadoA[i]);
   }
 }
 
