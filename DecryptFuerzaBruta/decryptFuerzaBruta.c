@@ -235,7 +235,7 @@ int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]){
 
   for(i=0; i<PASSWORDS; i++){
     if( clavesEncontradas[i] < 0){ //de las negativas
-      if(clavesEncontradas[i] >= clavesEncontradas[claveConMenorNumProcesos]) //la mayor
+      if(clavesEncontradas[i] > clavesEncontradas[claveConMenorNumProcesos]) //la mayor
         claveConMenorNumProcesos = i;
     }
   }
