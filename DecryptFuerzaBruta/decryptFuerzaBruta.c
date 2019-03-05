@@ -123,6 +123,7 @@ void main(int argc , char **argv)
         //manejar repeticiones
 
         if(numClaveDesencriptada >= 0 && numClaveDesencriptada < PASSWORDS){//recibimos n clave desencriptada, no se si habria que comprobar si ya ha sido resuelta previamente
+          printf("Padre: %d desencriptada por %d\n", numClaveDesencriptada, procesoDesencriptador);
 
         //1. marcamos esa contraseña como desencriptada, dos opciones dependiendo de implementacion:
           //marcarDesencriptada(keyList, clavesEncontradas, claveDesencriptada, procesoDesencriptador); //si se envia la clave en vez de n clave
@@ -135,11 +136,12 @@ void main(int argc , char **argv)
           {
             if(procAsignadoA[i] == numClaveDesencriptada)
             {
-              mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
-              MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
 
               procAsignadoA[i] = mensajeNumClave[0];
               clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1 ... vease anterior cE[] += -1
+              mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
+              printf("mensajeNumClave[0] %d\n", mensajeNumClave[0]);
+              MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD, &request); //no bloqueante, clave por descifrar a i
             }
           }
         } //fi
@@ -170,14 +172,16 @@ void main(int argc , char **argv)
 
       while(repeticiones<(MAX_RAND*2)) { //por seguridad he puesto un límite, pero seria bucle infinito
         MPI_Recv( mensajeNumClave, 1, tipo_mensajeNumClave, 0, TAG, MPI_COMM_WORLD, &status);
-        printf("Soy %d y me pasan %d\n", iId, mensajeNumClave[0]);
+        printf("Hijo: Soy %d y me pasan %d\n", iId, mensajeNumClave[0]);
         nClaveADesencriptar = mensajeNumClave[0];
         claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave[0] ][1], &repeticiones);
 
         //Si la clave ha sido desencriptada enviamos, en caso contrario (ha sido resuelta por otro) volvemos al recv a recibir la nueva a desencriptar
         if(strcmp(claveDesencriptada, "cancel") == 0){
+          printf("Hijo: me cancelan\n");
           continue;
         } else {
+          printf("Hijo: termine %s\n", claveDesencriptada);
           mensajeNumClave[1] = repeticiones;
           MPI_Send(mensajeNumClave, 1, tipo_mensajeNumClave, 0, TAG, MPI_COMM_WORLD);
         }
@@ -247,7 +251,7 @@ int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]){
 
   for(i=0; i<PASSWORDS; i++){
     if( clavesEncontradas[i] < 0){ //de las negativas
-      if(clavesEncontradas[i] > clavesEncontradas[claveConMenorNumProcesos]) //la mayor
+      if(clavesEncontradas[i] >= clavesEncontradas[claveConMenorNumProcesos]) //la mayor
         claveConMenorNumProcesos = i;
     }
   }
