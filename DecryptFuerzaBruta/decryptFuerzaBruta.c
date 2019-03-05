@@ -142,7 +142,7 @@ void main(int argc , char **argv)
         } //fi
 
         printMonitor(keyList, clavesEncontradas);
-      }
+      } //while
 
     //finalizamos
       clock_end = MPI_Wtime();
@@ -225,27 +225,24 @@ void printResultados(int repeticiones, double tiempoTotal){
 
 /*
  * Devuelve el n de una clave que no ha sido encontrada todavía
- * Para evitar demasiados menajes podia ser mejorado evitando
- * que fuese tan secuencial.
+ * Elige la que menos procesos tenga asignada esto es
+ * la que mayor numero negativo tenga
+ * (-1 son 0 procesos asignados, -3 son 2 procesos asignados)
  */
 int obtenerClaveADesencriptar(int clavesEncontradas[PASSWORDS]){
   int i;
+  int claveConMenorNumProcesos=0;
 
-//Mejora, primero los que no estan siendo resueltos por ninguno
   for(i=0; i<PASSWORDS; i++){
-    if(clavesEncontradas[i] == -1){
-      return i;
+    if( clavesEncontradas[i] < 0){ //de las negativas
+      if(clavesEncontradas[i] >= clavesEncontradas[claveConMenorNumProcesos]) //la mayor
+        claveConMenorNumProcesos = i;
     }
   }
 
-  for(i=0; i<PASSWORDS; i++){
-    if(clavesEncontradas[i] < -1){
-      return i;
-    }
-  }
-
-  return -1;
+  return claveConMenorNumProcesos;
 }
+
 
 /*
  * Dada una clave encriptada, mediante fuerza bruta va encriptando posibles claves y comparando
