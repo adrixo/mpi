@@ -164,7 +164,7 @@ void main(int argc , char **argv)
       repeticiones=0; //recogemos las repeticiones
 
       while(repeticiones<(MAX_RAND*2)) { //por seguridad he puesto un límite, pero seria bucle infinito
-        MPI_Recv( mensajeNumClave,1,tipo_mensajeNumClave,0,MPI_ANY_TAG,MPI_COMM_WORLD, &status);
+        MPI_Recv( mensajeNumClave, 1, tipo_mensajeNumClave, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         nClaveADesencriptar = mensajeNumClave[0];
         claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave[0] ][1], &repeticiones);
 
@@ -173,7 +173,7 @@ void main(int argc , char **argv)
           continue;
         } else {
           mensajeNumClave[1] = repeticiones;
-          MPI_Isend( mensajeNumClave, 1, tipo_mensajeNumClave, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
+          MPI_Send(mensajeNumClave, 1, tipo_mensajeNumClave, 0, MPI_ANY_TAG, MPI_COMM_WORLD);
         }
 
       }
