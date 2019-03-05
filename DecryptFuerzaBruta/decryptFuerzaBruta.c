@@ -11,6 +11,7 @@
 #include <crypt.h>
 #include <time.h>
 #include "mpi.h"
+#include <limits.h>
 
 #define TAG 10
 
@@ -18,8 +19,8 @@
 #define KEY_LENGTH 7 //Tenemos 20 claves encriptadas de 7 caracteres que contienen solo cifras.
 #define CRYPTED_LENGTH 14 //el tamaño de una contraseña encriptada es 13+1
 #define PASSWORDS 4 //numero de claves a generar
-#define MIN_RAND 1000000 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
-#define MAX_RAND 9999999
+#define MIN_RAND 100000 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
+#define MAX_RAND 999999
 /*
 #define MIN_RAND 1000000 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
 #define MAX_RAND 9999999
@@ -36,7 +37,7 @@ void marcarDesencriptada(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesE
 
 void printClaves(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int seed);
 void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontradas[PASSWORDS], int *procAsignadoA, int iNumProcs);
-void printResultados(int repeticiones, double tiempoTotal);
+void printResultados(unsigned int repeticiones, double tiempoTotal, int iNumProcs);
 // char *crypt(const char *key, const char *salt);
 
 /* Secuencial:
@@ -50,22 +51,19 @@ void printResultados(int repeticiones, double tiempoTotal);
 void main(int argc , char **argv)
 {
   int seed=9999;
-  int i, j, repeticiones = 0;
+  int i, j;
+  unsigned int repeticiones = 0;
   char *claveDesencriptada;
   int iId;
   int iNumProcs;
 
-  int mensajeNumClave[TAM_MENSAJE]; //supongamos por ejemplo que en el primer campo esta el n clave y en el segundo el n repeticiones
-  MPI_Datatype tipo_mensajeNumClave;
+  unsigned int mensajeNumClave;
   MPI_Status status;
   MPI_Request request;
 
   MPI_Init (&argc ,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &iId);
   MPI_Comm_size(MPI_COMM_WORLD, &iNumProcs);
-
-  MPI_Type_vector(TAM_MENSAJE, 1, 1, MPI_INT, &tipo_mensajeNumClave);
-  MPI_Type_commit(&tipo_mensajeNumClave);
 
   /* Podemos realizar el paso de las claves de 2 maneras:
    *  1. Pasar la clave como string de padre -> hijo
@@ -108,10 +106,10 @@ void main(int argc , char **argv)
     //busqueda de Claves
       //Iniciamos con una tarea para todos los procesos (tener en cuenta si nprocesos > nClaves)
       for(int i=1; i<iNumProcs; i++){
-        mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);//n clave a desencriptar
-        procAsignadoA[i] = mensajeNumClave[0]; //indicamos que el proceso i trabaja con la clave obtenida
-        clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1, si entendiamos que -1 era que no se habia encontrado, podemos entender -x como que x procesos (x-1 en realida) estan con esa tarea, por optimizacion
-        MPI_Send(mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD); //no bloqueante, clave n (i-j) a proceso i
+        mensajeNumClave =  obtenerClaveADesencriptar(clavesEncontradas);//n clave a desencriptar
+        procAsignadoA[i] = mensajeNumClave; //indicamos que el proceso i trabaja con la clave obtenida
+        clavesEncontradas[ mensajeNumClave ] += -1; // por optimización reducimos 1, si entendiamos que -1 era que no se habia encontrado, podemos entender -x como que x procesos (x-1 en realida) estan con esa tarea, por optimizacion
+        MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, i, TAG, MPI_COMM_WORLD);
       }
 
       printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
@@ -119,9 +117,9 @@ void main(int argc , char **argv)
       nClavesEncontradas = 0;
       while (nClavesEncontradas < PASSWORDS)
       {
-        MPI_Recv(mensajeNumClave, 1, tipo_mensajeNumClave, MPI_ANY_SOURCE/*global*/, TAG, MPI_COMM_WORLD, &status); //bloqueante, esperamos recibir clave desencriptada
+        MPI_Recv(&mensajeNumClave, 1, MPI_UNSIGNED, MPI_ANY_SOURCE/*global*/, TAG, MPI_COMM_WORLD, &status); //bloqueante, esperamos recibir clave desencriptada
 
-        numClaveDesencriptada = mensajeNumClave[0];
+        numClaveDesencriptada = mensajeNumClave;
         procesoDesencriptador = status.MPI_SOURCE;/*proceso del que se ha recibido*/
         //manejar repeticiones
 
@@ -141,11 +139,11 @@ void main(int argc , char **argv)
             {
               if(procAsignadoA[i] == numClaveDesencriptada)
               {
-                mensajeNumClave[0] = obtenerClaveADesencriptar(clavesEncontradas);
-                MPI_Send( mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD);
+                mensajeNumClave = obtenerClaveADesencriptar(clavesEncontradas);
+                MPI_Send( &mensajeNumClave, 1, MPI_UNSIGNED, i, TAG, MPI_COMM_WORLD);
 
-                procAsignadoA[i] = mensajeNumClave[0];
-                clavesEncontradas[ mensajeNumClave[0] ] += -1; // por optimización reducimos 1 ... vease anterior cE[] += -1
+                procAsignadoA[i] = mensajeNumClave;
+                clavesEncontradas[ mensajeNumClave ] += -1; // por optimización reducimos 1 ... vease anterior cE[] += -1
               }
             }
         } //fi
@@ -156,15 +154,28 @@ void main(int argc , char **argv)
     //finalizamos
       clock_end = MPI_Wtime();
       tiempoTotal = (clock_end - clock_start);// / (double) CLOCKS_PER_SEC;
-      printf("\n\tFINALIZADO\n");
-      printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
-      printResultados(repeticiones, tiempoTotal);
 
-      //matamos a los procesos
+      printf("\n\tFINALIZADO - RECIBIENDO REPETICIONES DE LOS PROCESOS\n");
+      //Matamos a los procesos
       for(int i=1; i<iNumProcs; i++){
-        mensajeNumClave[0] = -1;
-        MPI_Send(mensajeNumClave, 1, tipo_mensajeNumClave, i, TAG, MPI_COMM_WORLD); //no bloqueante, clave n (i-j) a proceso i
+        mensajeNumClave = PASSWORDS + 1; //si el mensaje contiene una contraseña no valida (maximo + 1 por ejemplo) terminamos
+        MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, i, TAG, MPI_COMM_WORLD);
       }
+
+      MPI_Barrier(MPI_COMM_WORLD);
+
+      unsigned int totalRepeticiones=0;
+      //Recogemos las repeticiones
+      for(i=0; i<iNumProcs-1; i++){
+        MPI_Recv(&mensajeNumClave, 1, MPI_UNSIGNED, MPI_ANY_SOURCE/*global*/, TAG, MPI_COMM_WORLD, &status);
+        printf("\tRepeticiones hijo %d: %d - %f%% (sobre UINT_MAX)\n", status.MPI_SOURCE, mensajeNumClave, (float) mensajeNumClave / UINT_MAX);
+        totalRepeticiones += mensajeNumClave;
+      }
+      printf("\tRepeticiones Total: %d - %f%% (sobre UINT_MAX)\n", totalRepeticiones, (float) totalRepeticiones / INT_MAX);
+
+      printMonitor(keyList, clavesEncontradas, procAsignadoA, iNumProcs);
+      printResultados(totalRepeticiones, tiempoTotal, iNumProcs);
+
 
       break;
     }
@@ -184,20 +195,28 @@ void main(int argc , char **argv)
       repeticiones=0; //recogemos las repeticiones
 
       while(1) { //por seguridad he puesto un límite, pero seria bucle infinito
-        MPI_Recv( mensajeNumClave, 1, tipo_mensajeNumClave, 0, TAG, MPI_COMM_WORLD, &status);
-        if(mensajeNumClave[0] == -1) break;
-        nClaveADesencriptar = mensajeNumClave[0];
-        claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave[0] ][1], &repeticiones);
+        MPI_Recv( &mensajeNumClave, 1, MPI_UNSIGNED, 0, TAG, MPI_COMM_WORLD, &status);
+
+        if(mensajeNumClave ==  PASSWORDS + 1)
+          break; //si el mensaje contiene una contraseña no valida (maximo + 1 por ejemplo) terminamos
+
+        nClaveADesencriptar = mensajeNumClave;
+        claveDesencriptada = desencriptarClave( keyList[ mensajeNumClave ][1], &repeticiones);
 
         //Si la clave ha sido desencriptada enviamos, en caso contrario (ha sido resuelta por otro) volvemos al recv a recibir la nueva a desencriptar
         if(strcmp(claveDesencriptada, "cancel") == 0){
           continue;
         } else {
-          mensajeNumClave[1] = repeticiones;
-          MPI_Send(mensajeNumClave, 1, tipo_mensajeNumClave, 0, TAG, MPI_COMM_WORLD);
+          mensajeNumClave = nClaveADesencriptar;
+          MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, 0, TAG, MPI_COMM_WORLD);
         }
       }
-      printf("Hijo %d: FIN\n", iId);
+
+      MPI_Barrier(MPI_COMM_WORLD);
+      //Una vez acabado mandamos las repeticiones al padre
+      mensajeNumClave = repeticiones;
+      MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, 0, TAG, MPI_COMM_WORLD);
+
       break;
     } //default
   } //case
@@ -250,8 +269,32 @@ void printMonitor(char keyList[PASSWORDS][2][CRYPTED_LENGTH], int clavesEncontra
   }
 }
 
-void printResultados(int repeticiones, double tiempoTotal){
-  printf("\nTerminado\n \tRepetciones: %d \n \tTiempo: %f \n\n", repeticiones, tiempoTotal);
+void printResultados(unsigned int repeticiones, double tiempoTotal, int iNumProcs){
+  int tamanoClave=0;
+  for(int i = MAX_RAND; i>0; i /= 10) tamanoClave++;
+
+  printf("\nCASO:\n - Claves  : %d \n - Tamanio : %d \n - procesos: %d + padre\n\nRESULTADO:\n - Repeticiones: %d \n - Tiempo: %f \n\n", PASSWORDS, tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
+
+  FILE *fd;
+  char * filename = malloc((32)*sizeof(char));
+  char * contenido = malloc((1024)*sizeof(char));
+  char * datos = malloc((512)*sizeof(char));
+  sprintf(filename, "%d_claves.txt\0", PASSWORDS);
+  char cabecera[128] = "tamano; numeroProcesos; repeticiones; tiempoTotal;";
+  sprintf(datos,      "%d; %d; %d; %f;",tamanoClave, iNumProcs-1, repeticiones, tiempoTotal);
+
+
+  fd = fopen(filename, "r");
+  if(fd == NULL){ //si no existe, añadimos la cabecera
+    sprintf(contenido, "%s\n%s\n\0", cabecera, datos);
+  } else {
+    fclose(fd);
+    sprintf(contenido, "%s\n\0", datos);
+  }
+
+  fd = fopen(filename, "a");
+  fprintf(fd, "%s", contenido);
+  fclose(fd);
 }
 
 /*
