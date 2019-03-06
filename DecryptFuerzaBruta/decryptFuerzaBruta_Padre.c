@@ -113,19 +113,27 @@ void main(int argc , char **argv)
         MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, i, TAG, MPI_COMM_WORLD);
       }
 
-      printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
 
       nClavesEncontradas = 0;
       while (nClavesEncontradas < NUM_CLAVES)
       {
         //El padre también debe intentar resolver contraseñas
         nClaveADesencriptar = obtenerClaveADesencriptar(clavesEncontradas);
+        procAsignadoA[0] = nClaveADesencriptar;
+        clavesEncontradas[ nClaveADesencriptar ] += -1;
+
+        printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
+
         claveDesencriptada = desencriptarClave( listaClaves[ mensajeNumClave ][1], &repeticiones);
         if(strcmp(claveDesencriptada, "cancel") == 0){
           //si otro la desencripta, atendemos a su peticion
+          procAsignadoA[0] = -1; //el proceso dejaria temporalmente de desencriptar
+          clavesEncontradas[ nClaveADesencriptar ] += 1; //por lo tanto quitamos el añadido de antes
+
           MPI_Recv(&mensajeNumClave, 1, MPI_UNSIGNED, MPI_ANY_SOURCE/*global*/, TAG, MPI_COMM_WORLD, &status); //bloqueante, esperamos recibir clave desencriptada
           numClaveDesencriptada = mensajeNumClave;
           procesoDesencriptador = status.MPI_SOURCE;/*proceso del que se ha recibido*/
+
         } else {
           //si el padre la desencripta lo interpretamos como si cualquiera lo hubiera hecho
           numClaveDesencriptada = nClaveADesencriptar;
@@ -159,7 +167,6 @@ void main(int argc , char **argv)
             }
         } //fi
 
-        printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
       } //while
 
     //finalizamos
@@ -182,6 +189,7 @@ void main(int argc , char **argv)
         printf("\tRepeticiones hijo %d: %d - %f%% (sobre UINT_MAX)\n", status.MPI_SOURCE, mensajeNumClave, (float) mensajeNumClave / UINT_MAX);
         totalRepeticiones += mensajeNumClave;
       }
+      totalRepeticiones += repeticiones; //las del padre
       printf("\tRepeticiones Total: %d - %f%% (sobre UINT_MAX)\n", totalRepeticiones, (float) totalRepeticiones / INT_MAX);
 
       printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
