@@ -18,7 +18,7 @@
 #define SALT "aa"
 #define KEY_LENGTH 7 //Tenemos 20 claves encriptadas de 7 caracteres que contienen solo cifras.
 #define CRYPTED_LENGTH 14 //el tamaño de una contraseña encriptada es 13+1
-#define NUM_CLAVES 4 //numero de claves a generar
+#define NUM_CLAVES 10 //numero de claves a generar
 #define MIN_RAND 100000 //realmente sería 0..0, se utiliza 10000 para evitar eliminacion de 0 en el parseo
 #define MAX_RAND 999999
 /*
