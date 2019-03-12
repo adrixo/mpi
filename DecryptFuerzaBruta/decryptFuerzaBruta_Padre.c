@@ -106,7 +106,7 @@ void main(int argc , char **argv)
 
     //busqueda de Claves
       //Iniciamos con una tarea para todos los procesos (tener en cuenta si nprocesos > nClaves)
-      for(int i=1; i<iNumProcs; i++){
+      for(i=1; i<iNumProcs; i++){
         mensajeNumClave =  obtenerClaveADesencriptar(clavesEncontradas);//n clave a desencriptar
         procAsignadoA[i] = mensajeNumClave; //indicamos que el proceso i trabaja con la clave obtenida
         clavesEncontradas[ mensajeNumClave ] += -1; // por optimización reducimos 1, si entendiamos que -1 era que no se habia encontrado, podemos entender -x como que x procesos (x-1 en realida) estan con esa tarea, por optimizacion
@@ -124,7 +124,7 @@ void main(int argc , char **argv)
 
         printMonitor(listaClaves, clavesEncontradas, procAsignadoA, iNumProcs);
 
-        claveDesencriptada = desencriptarClave( listaClaves[ mensajeNumClave ][1], &repeticiones);
+        claveDesencriptada = desencriptarClave( listaClaves[ nClaveADesencriptar ][1], &repeticiones);
         if(strcmp(claveDesencriptada, "cancel") == 0){
           //si otro la desencripta, atendemos a su peticion
           procAsignadoA[0] = -1; //el proceso dejaria temporalmente de desencriptar
@@ -175,7 +175,7 @@ void main(int argc , char **argv)
 
       printf("\n\tFINALIZADO - RECIBIENDO REPETICIONES DE LOS PROCESOS\n");
       //Matamos a los procesos
-      for(int i=1; i<iNumProcs; i++){
+      for(i=1; i<iNumProcs; i++){
         mensajeNumClave = NUM_CLAVES + 1; //si el mensaje contiene una contraseña no valida (maximo + 1 por ejemplo) terminamos
         MPI_Send(&mensajeNumClave, 1, MPI_UNSIGNED, i, TAG, MPI_COMM_WORLD);
       }
@@ -289,7 +289,8 @@ void printMonitor(char listaClaves[NUM_CLAVES][2][CRYPTED_LENGTH], int clavesEnc
 
 void printResultados(unsigned int repeticiones, double tiempoTotal, int iNumProcs){
   int tamanoClave=0;
-  for(int i = MAX_RAND; i>0; i /= 10) tamanoClave++;
+  int i;
+  for(i = MAX_RAND; i>0; i /= 10) tamanoClave++;
 
   int longNombreProc;
   char nombreProc[MPI_MAX_PROCESSOR_NAME];
